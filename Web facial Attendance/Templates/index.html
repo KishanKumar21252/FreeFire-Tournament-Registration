@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Face Recognition Attendance</title>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #74ebd5, #9face6);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container {
+      text-align: center;
+      max-width: 900px;
+      background: #fff;
+      padding: 30px;
+      border-radius: 20px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+    }
+    h1 { margin-bottom: 20px; font-size: 28px; color: #333; }
+    video {
+      width: 100%; max-width: 640px; border-radius: 15px;
+      border: 4px solid #333; margin-bottom: 20px;
+    }
+    .button-bar {
+      margin: 15px 0; display: flex; flex-wrap: wrap;
+      gap: 10px; justify-content: center;
+    }
+    button {
+      padding: 12px 20px; border: none; border-radius: 8px;
+      font-size: 15px; font-weight: bold; cursor: pointer;
+      transition: 0.3s;
+    }
+    button.start { background: #28a745; color: #fff; }
+    button.stop { background: #dc3545; color: #fff; }
+    button.snapshot { background: #007bff; color: #fff; }
+    button.download { background: #17a2b8; color: #fff; } /* New style for download button */
+    button.exit { background: #6c757d; color: #fff; }
+    button:hover { opacity: 0.9; transform: scale(1.05); }
+
+    footer {
+      margin-top: 30px;
+      font-size: 14px;
+      color: #555;
+    }
+    .status-card {
+      background: #f8f9fa; border-radius: 15px; padding: 15px;
+      margin-top: 15px; box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+    }
+    #status-text { font-size: 18px; font-weight: bold; }
+    .success { color: #28a745; }
+    .warning { color: #ffc107; }
+    .error { color: #dc3545; }
+    /* Attendance table - Removed as data is now server-side */
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📸 Face Recognition Attendance System</h1>
+
+    <video id="video" autoplay muted></video>
+
+    <div class="button-bar">
+      <button class="start" onclick="startCamera()">Start Camera</button>
+      <button class="stop" onclick="stopCamera()">Stop Camera</button>
+      <button class="snapshot" onclick="takeSnapshot()">📸 Mark Attendance</button>
+      <button class="download" onclick="downloadAttendance()">⬇️ Download Attendance</button>
+      <button class="exit" onclick="exitApp()">🚪 Exit</button>
+    </div>
+
+    <div class="status-card">
+      <div id="status-text">Please start the camera to begin.</div>
+    </div>
+
+    <footer>
+      <p>&copy; 2025 Face Recognition Attendance. All rights reserved.</p>
+    </footer>
+  </div>
+
+  <script>
+    const video = document.getElementById("video");
+    const statusText = document.getElementById("status-text");
+    let stream = null;
+
+    // --- Camera Functions ---
+    async function startCamera() {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      statusText.innerHTML = "<span class='success'>Camera started</span>";
+    }
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }
+      statusText.innerHTML = "<span class='warning'>Camera stopped</span>";
+    }
+
+    // --- Snapshot + API Call ---
+    async function takeSnapshot() {
+      if (!video.srcObject) return;
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0);
+      const dataUrl = canvas.toDataURL("image/jpeg");
+
+      try {
+        const response = await fetch("http://127.0.0.1:5000/recognize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: dataUrl })
+        });
+        const results = await response.json();
+
+        if (results.length > 0) {
+            const firstResult = results[0]; // Assuming one face per snapshot for simplicity
+            if (firstResult.ID !== "Unknown") {
+                statusText.innerHTML = `<span class="success">${firstResult.Name} (${firstResult.ID}) → Marked</span>`;
+            } else {
+                statusText.innerHTML = `<span class="warning">Unrecognized face detected.</span>`;
+            }
+        } else {
+            statusText.innerHTML = `<span class="warning">No face detected.</span>`;
+        }
+
+      } catch (err) {
+        console.error(err);
+        statusText.innerHTML = "<span class='error'>API error</span>";
+      }
+    }
+
+    function downloadAttendance() {
+      window.location.href = "http://127.0.0.1:5000/download_attendance";
+      statusText.innerHTML = "<span class='success'>Downloading attendance...</span>";
+    }
+
+    function exitApp() {
+      stopCamera();
+      statusText.innerHTML = "<span class='error'>Exited app</span>";
+    }
+  </script>
+</body>
+</html>
